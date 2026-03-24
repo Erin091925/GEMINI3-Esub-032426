@@ -18,6 +18,21 @@ export const PANTONE_PALETTES: Record<PantoneStyle, ThemeConfig> = {
   TangerineTango: { accent: '#DD4124', foreground: '#FFFFFF', name: 'Tangerine Tango (17-1463)' },
 };
 
+export const DEFAULT_PROMPTS = {
+  step1: "Generate a 2000-word FDA Intelligence Summary for a generic medical device. Include Device Description, Intended Use, and Predicate Comparison. Use Markdown.",
+  step2: "Generate a 2000-word Guidance-Driven Review Instruction set. Include a checklist and exactly 3 Markdown tables for Performance, Biocompatibility, and Labeling.",
+  step3: "Reorganize a hypothetical 510(k) submission summary based on the instructions from Step 2. Focus on mapping data to the required tables.",
+  step4: "Synthesize a final 3000-word Comprehensive 510(k) Review Report. Include Executive Summary, Deficiencies, and Final Recommendation.",
+  ocr: "Extract all text and tables from this medical device document. Maintain structural integrity.",
+  wow: "Analyze this regulatory artifact for risk, consistency, and labeling compliance.",
+};
+
+export const MODEL_OPTIONS = [
+  "gemini-2.5-flash",
+  "gemini-3-flash-preview",
+  "gemini-3.1-pro-preview"
+];
+
 export const TRANSLATIONS = {
   EN: {
     title: 'FDA 510(k) Review Studio v3.0',
@@ -40,6 +55,13 @@ export const TRANSLATIONS = {
     tokenEfficiency: 'Token Efficiency',
     activeStep: 'Active Pipeline Step',
     wordCount: 'Word Count',
+    stop: 'Stop Generation',
+    reset: 'Reset to FDA Defaults',
+    rollback: 'Rollback to this state',
+    apiKey: 'Gemini API Key',
+    model: 'Model Selection',
+    prompt: 'System Prompt',
+    timeline: 'State Lineage (DAG)',
   },
   ZH: {
     title: 'FDA 510(k) 審查工作室 v3.0',
@@ -62,5 +84,12 @@ export const TRANSLATIONS = {
     tokenEfficiency: 'Token 效率',
     activeStep: '當前流程步驟',
     wordCount: '字數',
+    stop: '停止生成',
+    reset: '重置為 FDA 預設',
+    rollback: '回滾到此狀態',
+    apiKey: 'Gemini API 金鑰',
+    model: '模型選擇',
+    prompt: '系統提示詞',
+    timeline: '狀態血統 (DAG)',
   },
 };

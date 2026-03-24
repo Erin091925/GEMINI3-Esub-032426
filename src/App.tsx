@@ -22,7 +22,14 @@ import {
   Search,
   BookOpen,
   Shuffle,
-  FileCheck
+  FileCheck,
+  Square,
+  RotateCcw,
+  History,
+  Key,
+  Cpu,
+  MessageSquare,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
@@ -41,8 +48,8 @@ import {
   Tooltip
 } from 'recharts';
 import { GoogleGenAI } from "@google/genai";
-import { PANTONE_PALETTES, TRANSLATIONS } from './constants';
-import { PantoneStyle, Language, PipelineStep, LogEntry, PipelineState } from './types';
+import { PANTONE_PALETTES, TRANSLATIONS, DEFAULT_PROMPTS, MODEL_OPTIONS } from './constants';
+import { PantoneStyle, Language, PipelineStep, LogEntry, PipelineState, AppSettings, HistoryEntry } from './types';
 
 // --- Components ---
 
@@ -78,51 +85,79 @@ const InteractiveIndicator = ({ step, currentStep, label }: { step: PipelineStep
   );
 };
 
-const Dashboard = ({ riskData, tokenData, t }: { riskData: any[], tokenData: any[], t: any }) => {
+const Dashboard = ({ riskData, tokenData, t, history, onRollback }: { riskData: any[], tokenData: any[], t: any, history: HistoryEntry[], onRollback: (entry: HistoryEntry) => void }) => {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
-      <div className="nordic-card p-4 h-64">
-        <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
-          <Activity size={16} className="text-[var(--accent)]" />
-          {t.riskRadar}
-        </h3>
-        <ResponsiveContainer width="100%" height="100%">
-          <RadarChart cx="50%" cy="50%" outerRadius="80%" data={riskData}>
-            <PolarGrid stroke="var(--border)" />
-            <PolarAngleAxis dataKey="subject" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} />
-            <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} />
-            <Radar
-              name="Risk"
-              dataKey="A"
-              stroke="var(--accent)"
-              fill="var(--accent)"
-              fillOpacity={0.6}
-            />
-          </RadarChart>
-        </ResponsiveContainer>
+    <div className="flex flex-col gap-6 p-6 h-full overflow-y-auto">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="nordic-card p-4 h-64">
+          <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+            <Activity size={16} className="text-[var(--accent)]" />
+            {t.riskRadar}
+          </h3>
+          <ResponsiveContainer width="100%" height="100%">
+            <RadarChart cx="50%" cy="50%" outerRadius="80%" data={riskData}>
+              <PolarGrid stroke="var(--border)" />
+              <PolarAngleAxis dataKey="subject" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} />
+              <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} />
+              <Radar
+                name="Risk"
+                dataKey="A"
+                stroke="var(--accent)"
+                fill="var(--accent)"
+                fillOpacity={0.6}
+              />
+            </RadarChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="nordic-card p-4 h-64">
+          <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+            <LayoutDashboard size={16} className="text-[var(--accent)]" />
+            {t.tokenEfficiency}
+          </h3>
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={tokenData}>
+              <defs>
+                <linearGradient id="colorTokens" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.8}/>
+                  <stop offset="95%" stopColor="var(--accent)" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+              <XAxis dataKey="name" hide />
+              <YAxis hide />
+              <Tooltip 
+                contentStyle={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', color: 'var(--text)' }}
+              />
+              <Area type="monotone" dataKey="tokens" stroke="var(--accent)" fillOpacity={1} fill="url(#colorTokens)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
       </div>
-      <div className="nordic-card p-4 h-64">
+
+      {/* Timeline / DAG */}
+      <div className="nordic-card p-4 flex-1 min-h-[200px]">
         <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
-          <LayoutDashboard size={16} className="text-[var(--accent)]" />
-          {t.tokenEfficiency}
+          <History size={16} className="text-[var(--accent)]" />
+          {t.timeline}
         </h3>
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={tokenData}>
-            <defs>
-              <linearGradient id="colorTokens" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.8}/>
-                <stop offset="95%" stopColor="var(--accent)" stopOpacity={0}/>
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-            <XAxis dataKey="name" hide />
-            <YAxis hide />
-            <Tooltip 
-              contentStyle={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', color: 'var(--text)' }}
-            />
-            <Area type="monotone" dataKey="tokens" stroke="var(--accent)" fillOpacity={1} fill="url(#colorTokens)" />
-          </AreaChart>
-        </ResponsiveContainer>
+        <div className="space-y-3">
+          {history.length === 0 && <p className="text-xs text-[var(--text-muted)] italic">No history yet.</p>}
+          {history.map((entry, idx) => (
+            <div key={idx} className="flex items-center justify-between p-2 rounded bg-[var(--bg)] border border-[var(--border)] group">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-mono opacity-50">{entry.timestamp}</span>
+                <span className="text-xs font-medium">{entry.label}</span>
+              </div>
+              <button 
+                onClick={() => onRollback(entry)}
+                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)] rounded transition-all"
+                title={t.rollback}
+              >
+                <RotateCcw size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -144,7 +179,7 @@ const LogViewer = ({ logs, t }: { logs: LogEntry[], t: any }) => {
           <Terminal size={12} />
           {t.logs}
         </span>
-        <span className="opacity-50">v3.0.0-STABLE</span>
+        <span className="opacity-50">v3.0.1-LIVE</span>
       </div>
       <div ref={scrollRef} className="overflow-y-auto flex-1 scrollbar-hide">
         {logs.map((log) => (
@@ -153,7 +188,8 @@ const LogViewer = ({ logs, t }: { logs: LogEntry[], t: any }) => {
             <span className={
               log.type === 'error' ? 'text-red-500' : 
               log.type === 'warning' ? 'text-yellow-500' : 
-              log.type === 'success' ? 'text-blue-400' : ''
+              log.type === 'success' ? 'text-blue-400' : 
+              log.type === 'system' ? 'text-purple-400' : ''
             }>
               {log.message}
             </span>
@@ -177,9 +213,25 @@ export default function App() {
     step4: '',
     currentStep: 1,
   });
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  
+  // LLM Settings
+  const [settings, setSettings] = useState<AppSettings>({
+    apiKey: process.env.GEMINI_API_KEY || '',
+    features: {
+      step1: { model: 'gemini-3-flash-preview', prompt: DEFAULT_PROMPTS.step1 },
+      step2: { model: 'gemini-3-flash-preview', prompt: DEFAULT_PROMPTS.step2 },
+      step3: { model: 'gemini-3-flash-preview', prompt: DEFAULT_PROMPTS.step3 },
+      step4: { model: 'gemini-3-flash-preview', prompt: DEFAULT_PROMPTS.step4 },
+      ocr: { model: 'gemini-3-flash-preview', prompt: DEFAULT_PROMPTS.ocr },
+      wow: { model: 'gemini-3-flash-preview', prompt: DEFAULT_PROMPTS.wow },
+    }
+  });
 
+  const abortControllerRef = useRef<AbortController | null>(null);
   const t = TRANSLATIONS[lang];
 
   // --- Theme Injection ---
@@ -207,7 +259,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    addLog('System Initialized: Nordic WOW Pantone Edition v3.0', 'success');
+    addLog('System Initialized: Nordic WOW Pantone Edition v3.0.1', 'system');
   }, []);
 
   // --- Mock Data for Charts ---
@@ -234,32 +286,36 @@ export default function App() {
     setIsGenerating(true);
     addLog(`Initiating Generation for Step ${pipeline.currentStep}...`, 'info');
     
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const model = "gemini-3-flash-preview";
-      
-      let prompt = "";
-      switch(pipeline.currentStep) {
-        case 1:
-          prompt = "Generate a 2000-word FDA Intelligence Summary for a generic medical device. Include Device Description, Intended Use, and Predicate Comparison. Use Markdown.";
-          break;
-        case 2:
-          prompt = "Generate a 2000-word Guidance-Driven Review Instruction set. Include a checklist and exactly 3 Markdown tables for Performance, Biocompatibility, and Labeling.";
-          break;
-        case 3:
-          prompt = "Reorganize a hypothetical 510(k) submission summary based on the instructions from Step 2. Focus on mapping data to the required tables.";
-          break;
-        case 4:
-          prompt = "Synthesize a final 3000-word Comprehensive 510(k) Review Report. Include Executive Summary, Deficiencies, and Final Recommendation.";
-          break;
-      }
+    abortControllerRef.current = new AbortController();
 
+    try {
+      const featureKey = `step${pipeline.currentStep}` as keyof AppSettings['features'];
+      const config = settings.features[featureKey];
+      
+      const ai = new GoogleGenAI({ apiKey: settings.apiKey });
+      
+      // Note: @google/genai doesn't natively support AbortController in generateContent yet, 
+      // but we can simulate the "Stop" by ignoring the result if aborted.
       const response = await ai.models.generateContent({
-        model,
-        contents: prompt,
+        model: config.model,
+        contents: config.prompt,
       });
 
+      if (abortControllerRef.current?.signal.aborted) {
+        addLog('Generation stopped by user.', 'warning');
+        return;
+      }
+
       const text = response.text || "Failed to generate content.";
+      
+      // Save to history before updating
+      const newHistoryEntry: HistoryEntry = {
+        timestamp: new Date().toLocaleTimeString('zh-TW', { hour12: false }),
+        state: { ...pipeline },
+        label: `Step ${pipeline.currentStep} Generated`
+      };
+      setHistory(prev => [newHistoryEntry, ...prev].slice(0, 10));
+
       setPipeline(prev => ({
         ...prev,
         [`step${pipeline.currentStep}`]: text
@@ -267,9 +323,22 @@ export default function App() {
       
       addLog(`Step ${pipeline.currentStep} Artifact Generated Successfully.`, 'success');
     } catch (error) {
-      addLog(`Generation Error: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+      if (error instanceof Error && error.name === 'AbortError') {
+        addLog('Generation aborted.', 'warning');
+      } else {
+        addLog(`Generation Error: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+      }
     } finally {
       setIsGenerating(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const stopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setIsGenerating(false);
+      addLog('Stopping generation...', 'warning');
     }
   };
 
@@ -281,8 +350,29 @@ export default function App() {
       step4: '',
       currentStep: 1,
     });
+    setHistory([]);
     setLogs([]);
     addLog('Total Purge Executed. Session Cleared.', 'warning');
+  };
+
+  const resetToDefaults = () => {
+    setSettings(prev => ({
+      ...prev,
+      features: {
+        step1: { model: 'gemini-3-flash-preview', prompt: DEFAULT_PROMPTS.step1 },
+        step2: { model: 'gemini-3-flash-preview', prompt: DEFAULT_PROMPTS.step2 },
+        step3: { model: 'gemini-3-flash-preview', prompt: DEFAULT_PROMPTS.step3 },
+        step4: { model: 'gemini-3-flash-preview', prompt: DEFAULT_PROMPTS.step4 },
+        ocr: { model: 'gemini-3-flash-preview', prompt: DEFAULT_PROMPTS.ocr },
+        wow: { model: 'gemini-3-flash-preview', prompt: DEFAULT_PROMPTS.wow },
+      }
+    }));
+    addLog('LLM Matrix reset to FDA Defaults.', 'system');
+  };
+
+  const handleRollback = (entry: HistoryEntry) => {
+    setPipeline(entry.state);
+    addLog(`Rolled back to state: ${entry.label}`, 'system');
   };
 
   const currentContent = pipeline[`step${pipeline.currentStep}` as keyof PipelineState] as string;
@@ -325,6 +415,14 @@ export default function App() {
           </select>
 
           <button 
+            onClick={() => setShowSettings(true)}
+            className="p-2 hover:bg-[var(--border)] rounded transition-colors"
+            title={t.settings}
+          >
+            <Settings size={18} />
+          </button>
+
+          <button 
             onClick={handlePurge}
             className="p-2 text-red-500 hover:bg-red-500/10 rounded transition-colors"
             title={t.purge}
@@ -337,8 +435,14 @@ export default function App() {
       <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 p-4 pt-0">
         {/* --- Left Sidebar: Dashboard & Logs --- */}
         <div className="lg:col-span-4 flex flex-col gap-6">
-          <div className="nordic-card flex-1">
-            <Dashboard riskData={riskData} tokenData={tokenData} t={t} />
+          <div className="nordic-card flex-1 overflow-hidden">
+            <Dashboard 
+              riskData={riskData} 
+              tokenData={tokenData} 
+              t={t} 
+              history={history}
+              onRollback={handleRollback}
+            />
             <div className="p-6 pt-0">
               <LogViewer logs={logs} t={t} />
             </div>
@@ -394,21 +498,23 @@ export default function App() {
             {/* Action Bar */}
             <div className="p-4 border-t border-[var(--border)] flex justify-between items-center">
               <div className="flex gap-2">
-                <button 
-                  onClick={generateArtifact}
-                  disabled={isGenerating}
-                  className="nordic-button flex items-center gap-2 disabled:opacity-50"
-                >
-                  {isGenerating ? (
-                    <motion.div 
-                      animate={{ rotate: 360 }}
-                      transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-                    >
-                      <Activity size={16} />
-                    </motion.div>
-                  ) : <FileText size={16} />}
-                  {t.generate}
-                </button>
+                {!isGenerating ? (
+                  <button 
+                    onClick={generateArtifact}
+                    className="nordic-button flex items-center gap-2"
+                  >
+                    <FileText size={16} />
+                    {t.generate}
+                  </button>
+                ) : (
+                  <button 
+                    onClick={stopGeneration}
+                    className="nordic-button bg-red-600 flex items-center gap-2"
+                  >
+                    <Square size={16} />
+                    {t.stop}
+                  </button>
+                )}
                 <button className="p-2 border border-[var(--border)] rounded hover:bg-[var(--border)] transition-colors">
                   <Save size={18} />
                 </button>
@@ -430,6 +536,120 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      {/* --- Settings Modal --- */}
+      <AnimatePresence>
+        {showSettings && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              className="nordic-card w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
+            >
+              <div className="p-6 border-b border-[var(--border)] flex justify-between items-center">
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  <Settings size={24} className="text-[var(--accent)]" />
+                  {t.settings}
+                </h2>
+                <div className="flex items-center gap-4">
+                  <button 
+                    onClick={resetToDefaults}
+                    className="text-xs flex items-center gap-1 text-[var(--accent)] hover:underline"
+                  >
+                    <RotateCcw size={14} />
+                    {t.reset}
+                  </button>
+                  <button onClick={() => setShowSettings(false)} className="p-1 hover:bg-[var(--border)] rounded">
+                    <X size={20} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-8">
+                {/* API Key Section */}
+                {!process.env.GEMINI_API_KEY && (
+                  <section className="space-y-4">
+                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                      <Key size={16} />
+                      {t.apiKey}
+                    </h3>
+                    <input 
+                      type="password"
+                      className="nordic-input w-full"
+                      value={settings.apiKey}
+                      onChange={(e) => setSettings(prev => ({ ...prev, apiKey: e.target.value }))}
+                      placeholder="Enter Gemini API Key..."
+                    />
+                  </section>
+                )}
+
+                {/* Feature Matrix */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {Object.entries(settings.features).map(([key, config]) => (
+                    <div key={key} className="p-4 border border-[var(--border)] rounded bg-[var(--bg)]/50 space-y-4">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--accent)]">
+                        {key.toUpperCase()}
+                      </h4>
+                      
+                      <div className="space-y-2">
+                        <label className="text-[10px] uppercase font-semibold text-[var(--text-muted)] flex items-center gap-1">
+                          <Cpu size={10} />
+                          {t.model}
+                        </label>
+                        <select 
+                          className="nordic-input w-full text-xs"
+                          value={config.model}
+                          onChange={(e) => setSettings(prev => ({
+                            ...prev,
+                            features: {
+                              ...prev.features,
+                              [key]: { ...config, model: e.target.value }
+                            }
+                          }))}
+                        >
+                          {MODEL_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] uppercase font-semibold text-[var(--text-muted)] flex items-center gap-1">
+                          <MessageSquare size={10} />
+                          {t.prompt}
+                        </label>
+                        <textarea 
+                          className="nordic-input w-full text-xs h-24 resize-none"
+                          value={config.prompt}
+                          onChange={(e) => setSettings(prev => ({
+                            ...prev,
+                            features: {
+                              ...prev.features,
+                              [key]: { ...config, prompt: e.target.value }
+                            }
+                          }))}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-[var(--border)] flex justify-end">
+                <button 
+                  onClick={() => setShowSettings(false)}
+                  className="nordic-button"
+                >
+                  {t.save}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* --- Footer --- */}
       <footer className="p-4 text-center text-[10px] text-[var(--text-muted)] uppercase tracking-[0.2em]">
